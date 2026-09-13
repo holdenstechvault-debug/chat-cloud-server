@@ -1,0 +1,52 @@
+name: Build Garage PPMA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ garage-cloud-build ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout garage build repo
+        uses: actions/checkout@v4
+
+      - name: Clone current Mayhem next branch
+        run: |
+          git clone --recursive --branch next https://github.com/portapack-mayhem/mayhem-firmware.git mayhem-firmware
+          cd mayhem-firmware
+          git submodule update --init --recursive
+
+      - name: Install Garage external app
+        run: |
+          python3 install_into_mayhem.py ./mayhem-firmware
+
+      - name: Build Mayhem Docker image
+        working-directory: ./mayhem-firmware
+        run: |
+          docker build -t portapack-dev -f dockerfile-nogit .
+
+      - name: Create build directory
+        run: mkdir -p mayhem-firmware/build
+
+      - name: Build Mayhem
+        working-directory: ./mayhem-firmware
+        run: |
+          docker run --rm -i \
+            -e VERSION_STRING=garage_custom \
+            -v "${{ github.workspace }}/mayhem-firmware:/havoc" \
+            portapack-dev
+
+      - name: Verify Garage app exists
+        run: |
+          test -f mayhem-firmware/build/firmware/application/garage.ppma
+          ls -lh mayhem-firmware/build/firmware/application/garage.ppma
+
+      - name: Upload garage.ppma
+        uses: actions/upload-artifact@v4
+        with:
+          name: garage-ppma
+          path: mayhem-firmware/build/firmware/application/garage.ppma
+          if-no-files-found: error
