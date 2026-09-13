@@ -19,29 +19,29 @@ GarageView::GarageView(NavigationView& nav)
     add_children({
         &labels,
         &text_identity,
+        &button_1,
+        &button_2,
+        &button_3,
         &text_status,
-        &progressbar,
-        &tx_view
+        &progressbar
     });
 
     text_identity.set(
         "FC " + to_string_dec_uint(kFacility) +
-        "  TX " + to_string_dec_uint(kTransmitter) +
-        "  KEY " + to_string_hex(kMegaCodeKey, 6));
+        "  TX " + to_string_dec_uint(kTransmitter));
 
-    // Conservative defaults. The amp stays off. TX gain can still be
-    // adjusted in the standard Mayhem transmitter controls if required.
     transmitter_model.set_target_frequency(kFrequency);
     transmitter_model.set_rf_amp(false);
     transmitter_model.set_tx_gain(0);
 
-    tx_view.on_start = [this]() {
-        start_tx();
+    button_1.on_select = [this](Button&) {
+        start_tx(1);
     };
-
-    tx_view.on_stop = [this]() {
-        baseband::kill_ook();
-        stop_tx();
+    button_2.on_select = [this](Button&) {
+        start_tx(2);
+    };
+    button_3.on_select = [this](Button&) {
+        start_tx(3);
     };
 }
 
@@ -52,24 +52,24 @@ GarageView::~GarageView() {
 }
 
 void GarageView::focus() {
-    tx_view.focus();
+    button_1.focus();
 }
 
-size_t GarageView::generate_frame() {
+size_t GarageView::generate_frame(uint8_t button) {
     size_t bitstream_length = 0;
 
+    const uint32_t key =
+        (1UL << 23) |
+        (static_cast<uint32_t>(kFacility) << 19) |
+        (static_cast<uint32_t>(kTransmitter) << 3) |
+        (button & 0x07U);
+
     // MegaCode sends the 24-bit key MSB first.
-    //
-    // Each data bit occupies six 1 ms OOK slices and contains exactly
-    // one 1 ms RF pulse:
-    //
+    // Each data bit occupies six 1 ms OOK slices:
     //   data 0 -> 001000
     //   data 1 -> 000001
-    //
-    // The generic Mayhem OOK baseband repeats this frame with a 9 ms
-    // all-zero pause between repetitions.
     for (uint32_t i = 0; i < 24; ++i) {
-        const bool bit = (kMegaCodeKey >> (23 - i)) & 1U;
+        const bool bit = (key >> (23 - i)) & 1U;
         bitstream_append(
             bitstream_length,
             6,
@@ -79,13 +79,16 @@ size_t GarageView::generate_frame() {
     return bitstream_length;
 }
 
-void GarageView::start_tx() {
-    const size_t bitstream_length = generate_frame();
+void GarageView::start_tx(uint8_t button) {
+    baseband::kill_ook();
+    transmitter_model.disable();
+
+    active_button_ = button;
+    const size_t bitstream_length = generate_frame(button);
 
     progressbar.set_max(kRepeats - 1);
     progressbar.set_value(0);
-    text_status.set("Transmitting...");
-    tx_view.set_transmitting(true);
+    text_status.set("Sending button " + to_string_dec_uint(button) + "...");
 
     transmitter_model.enable();
 
@@ -97,9 +100,9 @@ void GarageView::start_tx() {
 }
 
 void GarageView::stop_tx() {
+    baseband::kill_ook();
     transmitter_model.disable();
     progressbar.set_value(0);
-    tx_view.set_transmitting(false);
     text_status.set("Ready");
 }
 
@@ -107,15 +110,15 @@ void GarageView::on_tx_progress(uint32_t progress, bool done) {
     if (done) {
         transmitter_model.disable();
         progressbar.set_value(0);
-        tx_view.set_transmitting(false);
-        text_status.set("Done");
+        text_status.set("Button " + to_string_dec_uint(active_button_) + " sent");
         return;
     }
 
     progressbar.set_value(progress);
     text_status.set(
-        "Sending " + to_string_dec_uint(progress + 1) +
-        "/" + to_string_dec_uint(kRepeats));
+        "B" + to_string_dec_uint(active_button_) + " " +
+        to_string_dec_uint(progress + 1) + "/" +
+        to_string_dec_uint(kRepeats));
 }
 
 }  // namespace ui::external_app::garage
