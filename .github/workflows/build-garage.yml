@@ -13,9 +13,9 @@ jobs:
       - name: Checkout garage build repo
         uses: actions/checkout@v4
 
-      - name: Clone Mayhem n_260903 nightly
+      - name: Clone Mayhem n_260809 nightly
         run: |
-          git clone --recursive --branch nightly-tag-2026-09-03 https://github.com/portapack-mayhem/mayhem-firmware.git mayhem-firmware
+          git clone --recursive --branch nightly-tag-2026-08-09 https://github.com/portapack-mayhem/mayhem-firmware.git mayhem-firmware
           cd mayhem-firmware
           git submodule update --init --recursive
           git rev-parse --short HEAD
@@ -32,11 +32,11 @@ jobs:
       - name: Create build directory
         run: mkdir -p mayhem-firmware/build
 
-      - name: Build Mayhem for n_260903
+      - name: Build Mayhem for n_260809
         working-directory: ./mayhem-firmware
         run: |
           docker run --rm -i \
-            -e VERSION_STRING=n_260903 \
+            -e VERSION_STRING=n_260809 \
             -v "${{ github.workspace }}/mayhem-firmware:/havoc" \
             portapack-dev
 
@@ -48,6 +48,6 @@ jobs:
       - name: Upload garage.ppma
         uses: actions/upload-artifact@v4
         with:
-          name: garage-ppma-n_260903
+          name: garage-ppma-n_260809
           path: mayhem-firmware/build/firmware/application/garage.ppma
           if-no-files-found: error
